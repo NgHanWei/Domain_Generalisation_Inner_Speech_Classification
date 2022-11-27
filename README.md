@@ -1,5 +1,9 @@
 # Domain_Generalisation_Inner_Speech_Classification
 
+Selective Learning with Domain Generalization for Inner Speech Classification. A variational autoencoder which utilizes spatial and temporal filters is used to learn latent features of the EEG signal. Comparative contrastive loss is subsequently used to perform selective learning whereby data with more generalized features are favorably selected for training the baseline classifier. The same variational autoencoder serves a dual purpose of performing domain generalization on the selected data, which is then used to train the baseline inner speech classification model.
+
+In subject-adaptive transfer learning, the same variational autoencoder is finetuned to learn the subject-specific domain features. Domain generalization is then applied on the adaptive data before performing model finetuning on the classficiation model. Layer freezing is used to increase the computational speed of the model finetuning.
+
 ## Results Overview
 
 | Subject     | EEGNet | DeepConvNet | Proposed Method (EEGNet) | **Proposed Method (DeepConvNet)** |
@@ -17,6 +21,10 @@
 | **Average** | 26.68  | 24.40       | 27.20                    | 28.92                         |
 
 ## Resources
+
+Inner Speech Dataset: [Link](https://openneuro.org/datasets/ds003626/versions/2.1.2)
+
+Original Inner Speech Github: [Link](https://github.com/N-Nieto/Inner_Speech_Dataset)
 
 ## Dependencies
 
