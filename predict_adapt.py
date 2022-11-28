@@ -17,6 +17,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from braindecode.models.deep4 import Deep5Net
+from braindecode.models.eegnet import EEGNetv4
 from braindecode.datautil.signal_target import SignalAndTarget
 from braindecode.torch_ext.optimizers import AdamW
 from braindecode.torch_ext.util import set_random_seeds
@@ -49,16 +50,17 @@ parser = argparse.ArgumentParser(
 parser.add_argument('-subj', type=int,
                     help='Target Subject', required=True)
 parser.add_argument('-coeff', type=float,
-                    help='Data Selection Threshold Multiplier', default=1.5)
-parser.add_argument('--meta',default=False, help='Training Mode', action='store_true')
+                    help='Data Selection Threshold Multiplier, set to 0 for no Selection', default=1)
+parser.add_argument('--eegnet',default=False, help='Training Model', action='store_true')
 parser.add_argument('--dgtrain',default=False, help='Domain Generalisation on Training', action='store_true')
+parser.add_argument('--dgval',default=False, help='Domain Generalisation on Validation', action='store_true')
 parser.add_argument('--dgtest',default=False, help='Domain Generalisation on Test', action='store_true')
 args = parser.parse_args()
 
 ### Hyperparameters
 
 # The root dir have to point to the folder that cointains the database
-root_dir = "D:/Imagined_speech/"
+root_dir = "./"
 
 # Data Type
 datatype = "EEG"
@@ -70,8 +72,9 @@ t_end = 3.5
 
 # Target Subject
 targ_subj = args.subj #[1 to 10]
-meta = args.meta
+eegnet = args.eegnet
 dgtrain = args.dgtrain
+dgval = args.dgval
 dgtest = args.dgtest
 coeff = args.coeff
 
@@ -91,12 +94,6 @@ for i in range(1,11):
 
     # Cut usefull time. i.e action interval
     X = Select_time_window(X = X, t_start = t_start, t_end = t_end, fs = fs)
-
-    # print("Data shape: [trials x channels x samples]")
-    # print(X.shape) # Trials, channels, samples
-
-    # print("Labels shape")
-    # print(Y.shape) # Time stamp, class , condition, session
 
     # Conditions to compared
     Conditions = [["Inner"],["Inner"],["Inner"],["Inner"]]
@@ -131,8 +128,6 @@ for i in range(1,11):
     else:
         X_train = np.concatenate((X_train, X),axis=0) if X_train != [] else X
         Y_train = np.concatenate((Y_train, Y),axis=0) if Y_train != [] else Y
-        # X_val = np.concatenate((X_val, X),axis=0) if X_val != [] else X[round(len(X)*0.9):]
-        # Y_val = np.concatenate((Y_val, Y),axis=0) if Y_val != [] else Y[round(len(Y)*0.9):]
 
 
 print("Training Data shape")    
@@ -177,7 +172,7 @@ features = 16
 data = 'eeg'
 clip = 0
 
-data_load = torch.split(X_test[:50],batch_size)
+data_load = torch.split(X_train,batch_size)
 data_load_check = torch.split(X_train,1)
 channels = len(X_train[0,0,:,0])
 
@@ -330,12 +325,17 @@ with torch.no_grad():
         # print(batch_bce_loss)
         total_bce += batch_bce_loss
 
-        if batch_bce_loss < test_bce_loss*coeff:
+        add = 0
+        if coeff == 0:
+            add = inf
+
+        if batch_bce_loss < test_bce_loss*coeff + add:
             print(batch_bce_loss)
             anomaly_list.append(count)
             if dgtrain == True:
                 X_train_new = np.concatenate((X_train_new, reconstruction.detach().cpu().numpy()),axis=0) if X_train_new != [] else reconstruction.detach().cpu().numpy()
                 Y_train_new = np.concatenate((Y_train_new, [Y_train[count]]),axis=0) if Y_train_new != [] else [Y_train[count]]
+
             else:
                 X_train_new = np.concatenate((X_train_new, data_load_check[batch].detach().cpu().numpy()),axis=0) if X_train_new != [] else data_load_check[batch].detach().cpu().numpy()
                 Y_train_new = np.concatenate((Y_train_new, [Y_train[count]]),axis=0) if Y_train_new != [] else [Y_train[count]]
@@ -367,8 +367,6 @@ with torch.no_grad():
 
 
 ### Hyperparameters
-# The root dir have to point to the folder that cointains the database
-root_dir = "D:/Imagined_speech/"
 
 # Data Type
 datatype = "EEG"
@@ -380,7 +378,7 @@ t_end = 3.5
 
 # Target Subject
 targ_subj = args.subj #[1 to 10]
-meta = args.meta
+meta = False
 
 X_train = np.array([])
 Y_train = np.array([])
@@ -436,9 +434,6 @@ for i in range(1,11):
     else:
         X_train = np.concatenate((X_train, X),axis=0) if X_train != [] else X
         Y_train = np.concatenate((Y_train, Y),axis=0) if Y_train != [] else Y
-        # X_val = np.concatenate((X_val, X),axis=0) if X_val != [] else X[round(len(X)*0.9):]
-        # Y_val = np.concatenate((Y_val, Y),axis=0) if Y_val != [] else Y[round(len(Y)*0.9):]
-
 
 print("Training Data shape")    
 print(X_train.shape)
@@ -448,12 +443,6 @@ print("Test Data shape")
 print(X_test.shape)
 print(Y_test.shape)
 
-# If too many data is cut
-# if X_train_new.shape[0] < 500:
-#     print("TOO MANY CUT")
-#     X_train = X_train.astype(np.float32)
-#     Y_train = Y_train.astype(np.int64)
-# else:
 Max_val = 500
 norm = np.amax(abs(X_train_new))
 X_train_new = Max_val * X_train_new/norm
@@ -467,31 +456,25 @@ Y_val = Y_val.astype(np.int64)
 X_test = X_test.astype(np.float32)
 Y_test = Y_test.astype(np.int64)
 
-## Augmentation - Random Masking
-# X_aug = X_train
-# Y_aug = Y_train
-# for i in range(0,X_train.shape[0]):
-#     for j in range(0,X_train.shape[1]):
-#         rand_int = random.randint(0,450)
-#         X_aug[i,j,rand_int:rand_int+50] = 0
-# X_train = np.concatenate((X_train, X_aug),axis=0)
-# Y_train = np.concatenate((Y_train, Y_aug),axis=0)
 
 # Domain adaptation on valdiation data
 model_vae = vanilla_vae.VanillaVAE(filters=filters,channels=channels,features=features,data_type=data,data_length=len(data_load[0][:,0,0,0])).to(device)
 model_vae.load_state_dict(torch.load(file_name))
 
-new_X_val = torch.from_numpy(X_val)
+new_X = X_val
+Max_val = 500
+norm = np.amax(abs(new_X))
+new_X = Max_val * new_X/norm
+new_X = torch.from_numpy(new_X)
+new_X = new_X[:,np.newaxis,:,:].to('cuda')
 model_vae.eval()
 with torch.no_grad():
-    reconstruction, mu, logvar = model_vae(new_X_val[:,np.newaxis,:,:].to('cuda'))
-new_X_val = reconstruction.detach().cpu().numpy()
-Max_val = 500
-norm = np.amax(abs(new_X_val))
-new_X_val = Max_val * new_X_val/norm
+    reconstruction, mu, logvar = model_vae(new_X)
+new_X = reconstruction.detach().cpu().numpy()
+X_val_new= new_X[:,0,:,:]
 
 ### Training Details
-TRAIN_EPOCH = 200
+TRAIN_EPOCH = 50
 BATCH_SIZE = 16
 
 # print(X_train)
@@ -499,17 +482,39 @@ BATCH_SIZE = 16
 # print(X_test)
 
 train_set = SignalAndTarget(X_train, y=Y_train)
-if dgtest == True:
-    valid_set = SignalAndTarget(new_X_val[:,0,:,:], y=Y_val)
+if dgval == True:
+    valid_set = SignalAndTarget(X_val_new, y=Y_val)
 else:
     valid_set = SignalAndTarget(X_val, y=Y_val)
-test_set = SignalAndTarget(X_test, y=Y_test)
+
+new_X = X_test
+Max_val = 500
+norm = np.amax(abs(new_X))
+new_X = Max_val * new_X/norm
+new_X = torch.from_numpy(new_X)
+new_X = new_X[:,np.newaxis,:,:].to('cuda')
+model_vae.eval()
+with torch.no_grad():
+    reconstruction, mu, logvar = model_vae(new_X)
+new_X = reconstruction.detach().cpu().numpy()
+X_test_new= new_X[:,0,:,:]
+
+if dgtest == True:
+    test_set = SignalAndTarget(X_test_new, y=Y_test)
+else:
+    test_set = SignalAndTarget(X_test, y=Y_test)
 n_classes = 4
 in_chans = train_set.X.shape[1]
 
-model = Deep5Net(in_chans=in_chans, n_classes=n_classes,
+if eegnet == True:
+    model = EEGNetv4(in_chans=in_chans, n_classes=n_classes,
                     input_time_length=train_set.X.shape[2],
                     final_conv_length='auto').cuda()
+else:
+
+    model = Deep5Net(in_chans=in_chans, n_classes=n_classes,
+                        input_time_length=train_set.X.shape[2],
+                        final_conv_length='auto').cuda()
 
 optimizer = AdamW(model.parameters(), lr=1*0.01, weight_decay=0.5*0.001)
 model.compile(loss=F.nll_loss, optimizer=optimizer, iterator_seed=1, )
@@ -529,15 +534,15 @@ torch.save(base_model_param, pjoin(
 model.epochs_df.to_csv(
     pjoin('./results/', 'DG_epochs_subj{}.csv'.format(targ_subj)))
 
-
-new_X = torch.from_numpy(test_set.X)
+new_X = test_set.X
+Max_val = 500
+norm = np.amax(abs(new_X))
+new_X = Max_val * new_X/norm
+new_X = torch.from_numpy(new_X)
 model_vae.eval()
 with torch.no_grad():
     reconstruction, mu, logvar = model_vae(new_X[:,np.newaxis,:,:].to('cuda'))
 new_X = reconstruction.detach().cpu().numpy()
-Max_val = 500
-norm = np.amax(abs(new_X))
-new_X = Max_val * new_X/norm
 print(new_X.shape)
 
 # Comment out to not apply recon on test
@@ -546,5 +551,5 @@ if dgtest == True:
 
 test_loss = model.evaluate(test_set.X, test_set.y)
 print(test_loss)
-with open(pjoin('./results/', 'test_base_subj{}.json'.format(targ_subj)), 'w') as f:
+with open(pjoin('./results/', 'DG_test_base_subj{}.json'.format(targ_subj)), 'w') as f:
     json.dump(test_loss, f)
