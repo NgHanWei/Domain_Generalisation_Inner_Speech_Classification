@@ -51,7 +51,7 @@ Arguments:
 
 To recreate domain generalization on training and test data with selective learning on subject 1 using DeepConvNet, run:
 ```
-python predict_adapt.py --dgtrain --dgtest --coeff 1 -subj 1
+python predict_adapt.py --dgtrain --dgtest -coeff 1 -subj 1
 ```
 
 ### Subject-Adaptive Transfer Learning and Domain Generalization
