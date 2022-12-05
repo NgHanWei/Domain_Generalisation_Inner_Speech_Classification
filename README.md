@@ -30,64 +30,53 @@ Original Inner Speech Github: [Link](https://github.com/N-Nieto/Inner_Speech_Dat
 
 ## Run
 
-Perform Data Selection and Domain Generalisation/Adaptation
+Download inner speech dataset from the resources above and place in the same directory as the main folder.
 
-python predict_adapt.py --dgtrain --dgtest --coeff 1 -subj
+### Selective Learning and Domain Generalization for Baseline
 
-For no selective learning, set coeff to 0
-
-Settings:
-Perform DG on the data
---dgtrain
---dgval
---dgtest
-Set threshold
---coeff
-Set Subject
--subj
-
-python train_adapt.py -scheme -lr
-
-To recreate, scheme 4 and transfer rate 100%
-
-Settings:
-Perform DG on the data
---dgtrain
---dgval
---dgtest
-
-### Selective Learning and Domain Generalization for baseline
-
-To perform subject-adaptive transfer learning on chosen subject, run `train_speech_adapt.py`. Meta learning may also be utilized.
+To perform selective learning and domain generalization.
 ```
-usage: python train_adapt_all.py [ROOTDIR] [MODELPATH] [OUTPATH] [--META] [-scheme SCHEME] [-trfrate TRFRATE] [-lr LR] [-gpu GPU] [-subj SUBJ]
+usage: python predict_adapt.py [--eegnet] [--dgtrain] [--dgval] [--dgtest] [-coeff COEFF] [-subj SUBJ]
+
+Performs selective learning and domain generalization on the selected data which is subsequently used to train the classifier.
+
+Arguments:
+    --eegnet                            Set the classifier model to EEGNet. Default uses DeepConvNet.
+    --dgtrain                           Perform domain generalization on the training data.
+    --dgval                             Perform domain generalization on the validation data.
+    --dgtest                            Perform domain generalization on the evaluation data.
+    -coeff COEFF                        Set coefficient threshold for selective learning against learnt general features. Setting to 0 turns off selective learning.
+    -subj SUBJ                          Set subject to perform transfer learning adaptation on.
+```
+
+To recreate domain generalization on training and test data with selective learning on subject 1 using DeepConvNet, run:
+```
+python predict_adapt.py --dgtrain --dgtest --coeff 1 -subj 1
+```
+
+### Subject-Adaptive Transfer Learning and Domain Generalization
+To perform domain generalization on adaptation data followed by subject-adaptive transfer learning.
+```
+usage: python train_adapt.py [MODELPATH] [OUTPATH] [--eegnet] [--dgtrain] [--dgval] [--dgtest] [-scheme SCHEME] [-trfrate TRFRATE] [-lr LR] [-gpu GPU]
 
 Performs subject-adaptive transfer learning on a subject with or without meta-learning.
 
 Positional Arguments:
-    ROOTDIR                             Root directory path to the folder containing the EEG data
     MODELPATH                           Path to folder containing the baseline models for adaptation
     OUTPATH                             Path to folder for saving the adaptation results in
 
 Optional Arguments:
-    --meta                              Set to enable meta-learning, default meta-learning is switched off
+    --eegnet                            Set the classifier model to EEGNet. Default uses DeepConvNet.
+    --dgtrain                           Perform domain generalization on the training data.
+    --dgval                             Perform domain generalization on the validation data.
+    --dgtest                            Perform domain generalization on the evaluation data.
     -scheme SCHEME                      Set scheme which determines layers of the model to be frozen
     -trfrate TRFRATE                    Set amount of target subject data to be used for subject-adaptive transfer learning
     -lr LR                              Set the learning rate of the transfer learning
     -gpu GPU                            Set gpu to use, default is 0
-    -subj SUBJ                          Set subject to perform transfer learning adaptation on
 ```
 
-To perform subject-adaptive transfer learning on all subjects, run `train_speech_adapt_all.py`. Meta learning may also be utilized. Contains the same arguments as `train_speech_adapt.py` except without the subject argument.
-
-To recreate for meta-learning subject-adaptation, run:
+To recreate domain generalization and subject-adaptive transfer learning using DeepConvNet:
 ```
-python train_speech_adapt_all.py ROOTDIR MODELPATH OUTPATH --meta -scheme 1 -trfrate 40
+train_adapt.py MODELPATH OUTPATH -scheme 4 -trfrate 100 --dgtrain
 ```
-
-For normal subject-adaptation:
-```
-python train_speech_adapt_all.py ROOTDIR MODELPATH OUTPATH -scheme 1 -trfrate 40
-```
-
-### Subject-Adaptive Transfer Learning and Domain Generalization
