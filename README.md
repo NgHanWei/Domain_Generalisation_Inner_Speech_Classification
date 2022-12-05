@@ -55,3 +55,39 @@ Perform DG on the data
 --dgtrain
 --dgval
 --dgtest
+
+### Selective Learning and Domain Generalization for baseline
+
+To perform subject-adaptive transfer learning on chosen subject, run `train_speech_adapt.py`. Meta learning may also be utilized.
+```
+usage: python train_adapt_all.py [ROOTDIR] [MODELPATH] [OUTPATH] [--META] [-scheme SCHEME] [-trfrate TRFRATE] [-lr LR] [-gpu GPU] [-subj SUBJ]
+
+Performs subject-adaptive transfer learning on a subject with or without meta-learning.
+
+Positional Arguments:
+    ROOTDIR                             Root directory path to the folder containing the EEG data
+    MODELPATH                           Path to folder containing the baseline models for adaptation
+    OUTPATH                             Path to folder for saving the adaptation results in
+
+Optional Arguments:
+    --meta                              Set to enable meta-learning, default meta-learning is switched off
+    -scheme SCHEME                      Set scheme which determines layers of the model to be frozen
+    -trfrate TRFRATE                    Set amount of target subject data to be used for subject-adaptive transfer learning
+    -lr LR                              Set the learning rate of the transfer learning
+    -gpu GPU                            Set gpu to use, default is 0
+    -subj SUBJ                          Set subject to perform transfer learning adaptation on
+```
+
+To perform subject-adaptive transfer learning on all subjects, run `train_speech_adapt_all.py`. Meta learning may also be utilized. Contains the same arguments as `train_speech_adapt.py` except without the subject argument.
+
+To recreate for meta-learning subject-adaptation, run:
+```
+python train_speech_adapt_all.py ROOTDIR MODELPATH OUTPATH --meta -scheme 1 -trfrate 40
+```
+
+For normal subject-adaptation:
+```
+python train_speech_adapt_all.py ROOTDIR MODELPATH OUTPATH -scheme 1 -trfrate 40
+```
+
+### Subject-Adaptive Transfer Learning and Domain Generalization
