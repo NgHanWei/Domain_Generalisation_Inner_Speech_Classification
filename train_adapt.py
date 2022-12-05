@@ -20,7 +20,8 @@ from os.path import join as pjoin
 import numpy as np
 import torch
 import torch.nn.functional as F
-from braindecode.models.deep4 import Deep5Net
+from braindecode.models.deep4 import Deep4Net
+from braindecode.models.eegnet import EEGNetv4
 from braindecode.torch_ext.optimizers import AdamW
 from braindecode.torch_ext.util import set_random_seeds
 from torch import nn
@@ -43,22 +44,26 @@ set_random_seeds(seed=2022, cuda=True)
 
 parser = argparse.ArgumentParser(
     description='Subject-adaptative classification with Inner Speech')
-parser.add_argument('--meta',default=False, help='Training Mode', action='store_true')
-parser.add_argument('-scheme', type=int, help='Adaptation scheme', default=5)
+parser.add_argument('--eegnet',default=False, help='Training Model', action='store_true')
+parser.add_argument('-scheme', type=int, help='Adaptation scheme', default=4)
 parser.add_argument(
     '-trfrate', type=int, help='The percentage of data for adaptation', default=100)
+parser.add_argument('--dgtrain',default=False, help='Domain Generalisation on Training', action='store_true')
+parser.add_argument('--dgval',default=False, help='Domain Generalisation on Validation', action='store_true')
+parser.add_argument('--dgtest',default=False, help='Domain Generalisation on Test', action='store_true')
 parser.add_argument('-lr', type=float, help='Learning rate', default=0.0005)
 parser.add_argument('-gpu', type=int, help='The gpu device to use', default=0)
-parser.add_argument('-subj', type=int,
-                    help='Target Subject for Subject Selection', required=True)
 
 args = parser.parse_args()
 outpath = './adapt_results/'
-modelpath = './recon_1.5/'
+modelpath = './EEGNET/coeff1_dgtrain/'
 scheme = args.scheme
 rate = args.trfrate
 lr = args.lr
-meta = args.meta
+dgtrain = args.dgtrain
+dgval = args.dgval
+dgtest = args.dgtest
+eegnet = args.eegnet
 torch.cuda.set_device(args.gpu)
 set_random_seeds(seed=2022, cuda=True)
 BATCH_SIZE = 16
@@ -103,12 +108,6 @@ for subj in range(1,11):
 
         # Cut usefull time. i.e action interval
         X = Select_time_window(X = X, t_start = t_start, t_end = t_end, fs = fs)
-
-        # print("Data shape: [trials x channels x samples]")
-        # print(X.shape) # Trials, channels, samples
-
-        # print("Labels shape")
-        # print(Y.shape) # Time stamp, class , condition, session
 
         # Conditions to compared
         Conditions = [["Inner"],["Inner"],["Inner"],["Inner"]]
@@ -160,12 +159,14 @@ for subj in range(1,11):
     n_classes = 4
     in_chans = X.shape[1]
     # final_conv_length = auto ensures we only get a single output in the time dimension
-    model = Deep5Net(in_chans=in_chans, n_classes=n_classes,
-                    input_time_length=X.shape[2],
-                    final_conv_length='auto').cuda()
-
-    # Deprecated.
-
+    if eegnet == True:
+        model = EEGNetv4(in_chans=in_chans, n_classes=n_classes,
+                        input_time_length=X.shape[2],
+                        final_conv_length='auto').cuda()
+    else:
+        model = Deep4Net(in_chans=in_chans, n_classes=n_classes,
+                        input_time_length=X.shape[2],
+                        final_conv_length='auto').cuda()
 
     def reset_conv_pool_block(network, block_nr):
         suffix = "_{:d}".format(block_nr)
@@ -199,20 +200,6 @@ for subj in range(1,11):
     def reset_model(checkpoint):
         # Load the state dict of the model.
         model.network.load_state_dict(checkpoint['model_state_dict'])
-
-        # # Resets the last conv block
-        # reset_conv_pool_block(model.network, block_nr=4)
-        # reset_conv_pool_block(model.network, block_nr=3)
-        # reset_conv_pool_block(model.network, block_nr=2)
-        # # Resets the fully-connected layer.
-        # # Parameters of newly constructed modules have requires_grad=True by default.
-        # n_final_conv_length = model.network.conv_classifier.kernel_size[0]
-        # n_prev_filter = model.network.conv_classifier.in_channels
-        # n_classes = model.network.conv_classifier.out_channels
-        # model.network.conv_classifier = nn.Conv2d(
-        #     n_prev_filter, n_classes, (n_final_conv_length, 1), bias=True)
-        # nn.init.xavier_uniform_(model.network.conv_classifier.weight, gain=1)
-        # nn.init.constant_(model.network.conv_classifier.bias, 0)
 
         if scheme != 5:
             # Freeze all layers.
@@ -260,7 +247,16 @@ for subj in range(1,11):
 
     checkpoint = torch.load(pjoin(modelpath, 'DG_model_subj' + str(targ_subj) + '.pt'),
                             map_location='cuda:' + str(args.gpu))
-    reset_model(checkpoint)
+    if eegnet == False:
+        reset_model(checkpoint)
+    else:
+        model.network.load_state_dict(checkpoint['model_state_dict'])
+        # Only optimize parameters that requires gradient.
+        optimizer = AdamW(filter(lambda p: p.requires_grad, model.network.parameters()),
+                        lr=lr, weight_decay=0.5*0.001)
+        # optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        model.compile(loss=F.nll_loss, optimizer=optimizer,
+                    iterator_seed=2022, )
 
     X, Y = X_test, Y_test
     X_train, Y_train = X[:cutoff], Y[:cutoff]
@@ -306,39 +302,44 @@ for subj in range(1,11):
 
         return train_loss
 
-    epochs = 20
-    for epoch in range(epochs):
-        print(f"Epoch {epoch+1} of {epochs}")
-        train_epoch_loss = fit(model_vae)
+    # epochs = 20
+    # for epoch in range(epochs):
+    #     print(f"Epoch {epoch+1} of {epochs}")
+    #     train_epoch_loss = fit(model_vae)
 
-    new_X = torch.from_numpy(X_train)
-    new_X = new_X[:,np.newaxis,:,:].to('cuda')
-    model_vae.eval()
-    with torch.no_grad():
-        reconstruction, mu, logvar = model_vae(new_X)
-    new_X = reconstruction.detach().cpu().numpy()
-    Max_val = 500
-    norm = np.amax(abs(new_X))
-    new_X = Max_val * new_X/norm
-    # X_train= new_X[:,0,:,:]
+    def domain_adapt(x_array):
+        new_X = x_array
+        Max_val = 500
+        norm = np.amax(abs(new_X))
+        new_X = Max_val * new_X/norm
+        new_X = torch.from_numpy(new_X)
+        new_X = new_X[:,np.newaxis,:,:].to('cuda')
+        model_vae.eval()
+        with torch.no_grad():
+            reconstruction, mu, logvar = model_vae(new_X)
+        new_X = reconstruction.detach().cpu().numpy()
+        new_X= new_X[:,0,:,:]
+
+        return new_X
+
+    if dgtrain == True:   
+        X_train = domain_adapt(X_train)
+
+    # X_train = np.concatenate((X_train, X_train_new),axis=0)
+    # Y_train = np.concatenate((Y_train, Y_train),axis=0)
 
     X_val, Y_val = X[cutoff:], Y[cutoff:]
-    # X_val, Y_val = X, Y
+
+    if dgval == True:
+        X_val = domain_adapt(X_val)
+
     model.fit(X_train, Y_train, epochs=TRAIN_EPOCH,
                 batch_size=BATCH_SIZE, scheduler='cosine',
-                validation_data=(X_val, Y_val), remember_best_column='valid_misclass',meta=meta)
+                validation_data=(X_val, Y_val), remember_best_column='valid_misclass')
     model.epochs_df.to_csv(pjoin(outpath, 'epochs' + str(targ_subj) + '.csv'))
 
-    new_X = torch.from_numpy(X_test)
-    new_X = new_X[:,np.newaxis,:,:].to('cuda')
-    model_vae.eval()
-    with torch.no_grad():
-        reconstruction, mu, logvar = model_vae(new_X)
-    new_X = reconstruction.detach().cpu().numpy()
-    Max_val = 500
-    norm = np.amax(abs(new_X))
-    new_X = Max_val * new_X/norm
-    # X_test= new_X[:,0,:,:]
+    if dgtest == True:
+        X_test = domain_adapt(X_test)
 
     test_loss = model.evaluate(X_test[cutoff:], Y_test[cutoff:])
     total_loss.append(test_loss["misclass"])
