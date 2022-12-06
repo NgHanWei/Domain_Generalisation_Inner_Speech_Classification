@@ -44,6 +44,8 @@ set_random_seeds(seed=2022, cuda=True)
 
 parser = argparse.ArgumentParser(
     description='Subject-adaptative classification with Inner Speech')
+parser.add_argument('modelpath', type=str, help='Path to the baseline models')
+parser.add_argument('outpath', type=str, help='Path to the result folder')
 parser.add_argument('--eegnet',default=False, help='Training Model', action='store_true')
 parser.add_argument('-scheme', type=int, help='Adaptation scheme', default=4)
 parser.add_argument(
@@ -55,8 +57,8 @@ parser.add_argument('-lr', type=float, help='Learning rate', default=0.0005)
 parser.add_argument('-gpu', type=int, help='The gpu device to use', default=0)
 
 args = parser.parse_args()
-outpath = './adapt_results/'
-modelpath = './EEGNET/coeff1_dgtrain/'
+outpath = args.outpath
+modelpath = args.modelpath
 scheme = args.scheme
 rate = args.trfrate
 lr = args.lr
