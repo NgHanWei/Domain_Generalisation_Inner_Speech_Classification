@@ -1,4 +1,5 @@
-# Domain_Generalisation_Inner_Speech_Classification
+# Efficient Representation Learning for Inner Speech Domain Generalization (CAIP 2023)
+https://www.springerprofessional.de/efficient-representation-learning-for-inner-speech-domain-genera/26062094
 
 Selective Learning with Domain Generalization for Inner Speech Classification. A variational autoencoder which utilizes spatial and temporal filters is used to learn latent features of the EEG signal. Comparative contrastive loss is subsequently used to perform selective learning whereby data with more generalized features are favorably selected for training the baseline classifier. The same variational autoencoder serves a dual purpose of performing domain generalization on the selected data, which is then used to train the baseline inner speech classification model.
 
